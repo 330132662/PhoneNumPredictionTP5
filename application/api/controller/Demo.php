@@ -4,7 +4,14 @@ namespace app\api\controller;
 
 use app\common\controller\Api;
 use app\model\PhoneNumM;
+use Exception;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use think\Db;
+use think\Log;
 
 /**
  * 示例接口
@@ -75,10 +82,13 @@ class Demo extends Api
 
     function index()
     {
-        $start = request()->get('start/d');
-        $end = request()->get('end/d');
+        $start = request()->get('start/s');
+        $end = request()->get('end/s');
         $city = request()->get('city/s');
         $province = request()->get('province/s');
+        $export = $this->request->get("is_export/d", 0);
+
+
         $province = str_replace("省", "", $province);
         $city = str_replace("市", "", $city);
         $cond["prefix"] = array("=", "$start");
@@ -91,8 +101,14 @@ class Demo extends Api
                 $telList[$k]['phone'] = $v['phone'] . $end;
                 $telList[$k]['isp'] = $v['province'] . $v['city'] . $v['isp'];
             }
+            $resp["list"] = $telList;
+            $resp["download"] = request()->domain() . request()->url()."&is_export=1";
+            if ($export) {
+                $this->exportExcel($telList);
+            } else {
+                $this->success("OK", $resp);
 
-            $this->success("OK", $telList);
+            }
         } else {
             $this->error("没有符合条件的数据");
         }
@@ -131,7 +147,136 @@ class Demo extends Api
             }
         }
         $provincelist = Db::name('area')->where($where)->field('id as value,shortname')->select();
+
         $this->success('', $provincelist);
 
+    }
+
+    private function exportExcel($employeeData)
+    {
+        try {
+            // 创建新的Spreadsheet对象
+            $spreadsheet = new Spreadsheet();
+            $sheet = $spreadsheet->getActiveSheet();
+
+            // 设置表格标题
+            $sheet->setTitle('信息表');
+
+            // 设置表头
+            $headers = ['手机号', '归属地'];
+            $columnIndex = 1;
+
+            foreach ($headers as $header) {
+                $sheet->setCellValueByColumnAndRow($columnIndex++, 1, $header);
+            }
+
+            // 获取数据
+
+            // 填充数据
+            $rowIndex = 2;
+            foreach ($employeeData as $employee) {
+                $columnIndex = 1;
+                foreach ($employee as $value) {
+                    $sheet->setCellValueByColumnAndRow($columnIndex++, $rowIndex, $value);
+                }
+                $rowIndex++;
+            }
+
+            // 设置表头样式
+            $headerStyle = [
+                'font' => [
+                    'bold' => true,
+                    'size' => 12,
+                    'color' => ['rgb' => 'FFFFFF']
+                ],
+                'fill' => [
+                    'fillType' => Fill::FILL_SOLID,
+                    'startColor' => ['rgb' => '409EFF']
+                ],
+                'alignment' => [
+                    'horizontal' => Alignment::HORIZONTAL_CENTER,
+                    'vertical' => Alignment::VERTICAL_CENTER
+                ],
+                'borders' => [
+                    'allBorders' => [
+                        'borderStyle' => Border::BORDER_THIN,
+                        'color' => ['rgb' => 'CCCCCC']
+                    ]
+                ]
+            ];
+
+            $sheet->getStyle('A1:F1')->applyFromArray($headerStyle);
+
+            // 设置数据区域样式
+            $dataStyle = [
+                'alignment' => [
+                    'horizontal' => Alignment::HORIZONTAL_CENTER,
+                    'vertical' => Alignment::VERTICAL_CENTER
+                ],
+                'borders' => [
+                    'allBorders' => [
+                        'borderStyle' => Border::BORDER_THIN,
+                        'color' => ['rgb' => 'CCCCCC']
+                    ]
+                ]
+            ];
+
+            $lastRow = count($employeeData) + 1;
+            $sheet->getStyle("A2:F{$lastRow}")->applyFromArray($dataStyle);
+
+            // 设置列宽
+            $sheet->getColumnDimension('A')->setWidth(20);
+            $sheet->getColumnDimension('B')->setWidth(20);
+            /*  $sheet->getColumnDimension('C')->setWidth(15);
+              $sheet->getColumnDimension('D')->setWidth(18);
+              $sheet->getColumnDimension('E')->setWidth(15);
+              $sheet->getColumnDimension('F')->setWidth(12);*/
+
+            // 设置数字格式（工资列）
+            $sheet->getStyle("F2:F{$lastRow}")->getNumberFormat()->setFormatCode('¥#,##0');
+
+            // 设置自动筛选
+            $sheet->setAutoFilter("A1:F{$lastRow}");
+
+            // 设置冻结窗格（固定表头）
+            $sheet->freezePane('A2');
+
+            // 创建Excel文件
+            $writer = new Xlsx($spreadsheet);
+
+            // 设置响应头，准备下载
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment;filename="信息表_' . date('YmdHis') . '.xlsx"');
+            header('Cache-Control: max-age=0');
+
+            // 输出到浏览器
+            $writer->save('php://output');
+
+            // 终止脚本执行
+//            exit;
+
+
+            // 生成保存路径
+            /*$uploadDir = __DIR__ . '/public/uploads/';
+            if (!file_exists($uploadDir)) {
+                mkdir($uploadDir, 0777, true);
+            }
+
+            $fileName = '信息表_' . date('YmdHis') . '.xlsx';
+            $filePath = $uploadDir . $fileName;
+
+            // 保存Excel文件到服务器
+            $writer->save($filePath);
+            $resp["s"] = request()->host() . '/public/uploads/' . $fileName;
+            $this->success("", $resp);*/
+        } catch (Exception $e) {
+            // 错误处理
+            header('Content-Type: text/plain; charset=utf-8');
+            $s = $e->getMessage() . $e->getTraceAsString();
+            echo "导出Excel文件时发生错误: " . $s;
+            Log::error($s);
+//            $this->error("导出Excel文件时发生错误: " . $e->getMessage());
+
+        }
     }
 }
