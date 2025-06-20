@@ -3,6 +3,7 @@
 namespace app\api\controller;
 
 use app\common\controller\Api;
+use app\model\PhoneNumM;
 use think\Db;
 
 /**
@@ -16,9 +17,10 @@ class Demo extends Api
     //如果接口已经设置无需登录,那也就无需鉴权了
     //
     // 无需登录的接口,*表示全部
-    protected $noNeedLogin = ['test', 'test1'];
+    protected $noNeedLogin = ['test', 'test1', "area", "index"];
     // 无需鉴权的接口,*表示全部
     protected $noNeedRight = ['test2'];
+
 
     /**
      * 测试方法
@@ -35,9 +37,9 @@ class Demo extends Api
      * @ApiReturnParams   (name="msg", type="string", required=true, sample="返回成功")
      * @ApiReturnParams   (name="data", type="object", sample="{'user_id':'int','user_name':'string','profile':{'email':'string','age':'integer'}}", description="扩展数据返回")
      * @ApiReturn   ({
-         'code':'1',
-         'msg':'返回成功'
-        })
+    'code':'1',
+    'msg':'返回成功'
+    })
      */
     public function test()
     {
@@ -70,12 +72,47 @@ class Demo extends Api
     {
         $this->success('返回成功', ['action' => 'test3']);
     }
+
+    function index()
+    {
+        $start = request()->get('start/d');
+        $end = request()->get('end/d');
+        $city = request()->get('city/s');
+        $province = request()->get('province/s');
+        $province = str_replace("省", "", $province);
+        $city = str_replace("市", "", $city);
+        $cond["prefix"] = array("=", "$start");
+        $cond["province"] = array("like", "%$province");
+        $cond["city"] = array("like", "%$city");
+        $res = PhoneNumM::where($cond)->select();
+        if ($res) {
+            $telList = [];
+            foreach ($res as $k => $v) {
+                $telList[$k]['phone'] = $v['phone'] . $end;
+                $telList[$k]['isp'] = $v['province'] . $v['city'] . $v['isp'];
+            }
+
+            $this->success("OK", $telList);
+        } else {
+            $this->error("没有符合条件的数据");
+        }
+
+
+    }
+
     /**
      * 读取省市区数据,联动列表
      */
     public function area()
     {
-        $params = $this->request->get("row/a");
+//        $params = $this->request->get("row/a");
+        $lv = $this->request->get("level/d", 1);
+        $pid = $this->request->get("pid/d", 0);
+        if ($pid == 0) {
+            $lv = 1;
+        } else {
+            $lv = 2;
+        }
         if (!empty($params)) {
             $province = isset($params['province']) ? $params['province'] : null;
             $city = isset($params['city']) ? $params['city'] : null;
@@ -83,7 +120,7 @@ class Demo extends Api
             $province = $this->request->get('province');
             $city = $this->request->get('city');
         }
-        $where = ['pid' => 0, 'level' => 1];
+        $where = ['pid' => $pid, 'level' => $lv];
         $provincelist = null;
         if ($province !== null) {
             $where['pid'] = $province;
@@ -93,7 +130,8 @@ class Demo extends Api
                 $where['level'] = 3;
             }
         }
-        $provincelist = Db::name('area')->where($where)->field('id as value,name')->select();
-        $this->success('', '', $provincelist);
+        $provincelist = Db::name('area')->where($where)->field('id as value,shortname')->select();
+        $this->success('', $provincelist);
+
     }
 }
