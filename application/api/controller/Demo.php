@@ -9,6 +9,7 @@ use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
+use PhpOffice\PhpSpreadsheet\Writer\Csv;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use think\Db;
 use think\Log;
@@ -95,14 +96,20 @@ class Demo extends Api
         $cond["province"] = array("like", "%$province");
         $cond["city"] = array("like", "%$city");
         $res = PhoneNumM::where($cond)->select();
+        $total = PhoneNumM::count();
+        $resp["all_count"] = $total;
         if ($res) {
             $telList = [];
             foreach ($res as $k => $v) {
                 $telList[$k]['phone'] = $v['phone'] . $end;
-                $telList[$k]['isp'] = $v['province'] . $v['city'] . $v['isp'];
+                if (!$export) {
+                    $telList[$k]['isp'] = $v['province'] . $v['city'] . $v['isp'];
+                }
             }
             $resp["list"] = $telList;
-            $resp["download"] = request()->domain() . request()->url()."&is_export=1";
+            $resp["current_count"] = count($res);
+            $resp["all_count"] = $total;
+            $resp["download"] = request()->domain() . request()->url() . "&is_export=1";
             if ($export) {
                 $this->exportExcel($telList);
             } else {
@@ -110,7 +117,7 @@ class Demo extends Api
 
             }
         } else {
-            $this->error("没有符合条件的数据");
+            $this->error("没有符合条件的数据", $resp);
         }
 
 
@@ -163,17 +170,17 @@ class Demo extends Api
             $sheet->setTitle('信息表');
 
             // 设置表头
-            $headers = ['手机号', '归属地'];
+            $headers = ['手机号'];
             $columnIndex = 1;
 
-            foreach ($headers as $header) {
+            /*foreach ($headers as $header) {
                 $sheet->setCellValueByColumnAndRow($columnIndex++, 1, $header);
-            }
+            }*/
 
             // 获取数据
 
             // 填充数据
-            $rowIndex = 2;
+            $rowIndex = 1;
             foreach ($employeeData as $employee) {
                 $columnIndex = 1;
                 foreach ($employee as $value) {
@@ -226,7 +233,7 @@ class Demo extends Api
 
             // 设置列宽
             $sheet->getColumnDimension('A')->setWidth(20);
-            $sheet->getColumnDimension('B')->setWidth(20);
+//            $sheet->getColumnDimension('B')->setWidth(20);
             /*  $sheet->getColumnDimension('C')->setWidth(15);
               $sheet->getColumnDimension('D')->setWidth(18);
               $sheet->getColumnDimension('E')->setWidth(15);
@@ -242,11 +249,17 @@ class Demo extends Api
             $sheet->freezePane('A2');
 
             // 创建Excel文件
-            $writer = new Xlsx($spreadsheet);
+            $writer = new Csv($spreadsheet);
+            // 配置分隔符（可选，默认为逗号）
+            $writer->setDelimiter("\t");  // 使用制表符分隔（更适合TXT）
+            $writer->setEnclosure('');    // 不使用引号包裹值
+            $writer->setLineEnding("\r\n"); // Windows格式换行
+            $writer->setSheetIndex(0);    // 选择第一个工作表
+
 
             // 设置响应头，准备下载
             header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            header('Content-Disposition: attachment;filename="信息表_' . date('YmdHis') . '.xlsx"');
+            header('Content-Disposition: attachment;filename="信息表_' . date('YmdHis') . '.txt"');
             header('Cache-Control: max-age=0');
 
             // 输出到浏览器
