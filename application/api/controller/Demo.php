@@ -94,7 +94,7 @@ class Demo extends Api
         $city = str_replace("市", "", $city);
         $cond["prefix"] = array("=", "$start");
         $cond["province"] = array("like", "%$province");
-        $cond["city"] = array("like", "%$city");
+        $cond["city"] = array("like", "%$city%");
         $res = PhoneNumM::where($cond)->select();
         $total = PhoneNumM::count();
         $resp["all_count"] = $total;
